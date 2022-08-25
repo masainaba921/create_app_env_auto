@@ -1,0 +1,35 @@
+---
+- name: Install nvm
+  git:
+    repo: https://github.com/creationix/nvm.git
+    dest: ~/.nvm
+
+- name: Add nvm to PATH
+  lineinfile: 
+    path="~/.bashrc"
+    line={{ item }}
+  with_items:
+    - 'export NVM_DIR="$HOME/.nvm"'
+    - '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"'
+    - '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"'
+
+- name: Check Node.js installed
+  shell: bash -lc "nvm versions | grep {{ nodejs_version }}"
+  register: nodejs_check_install
+  changed_when: False
+  ignore_errors: yes
+
+- name: Install Node.js
+  shell: bash -lc "nvm install v{{ nodejs_version }}"
+  when: nodejs_check_install.rc == 1
+
+- name: Load Node.js setting
+  shell: bash -lc "source ~/.bashrc"
+
+- name: Install yarn
+  shell: bash -lc "npm install -g yarn"
+
+
+
+
+

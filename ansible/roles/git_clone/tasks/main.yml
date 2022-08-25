@@ -1,0 +1,14 @@
+---
+- name:  Git Clone directory created
+  become: yes
+  block:
+  - name: For Nginx directory
+    file:
+      path: /var/www
+      state: directory
+      owner: "{{ user_name }}"
+      group: "{{ user_name }}"
+      mode: "775"
+
+- name: Clone the repository
+  shell: bash -lc "git clone {{ GIT_REPO }} {{ CLONE_DEST }}"

@@ -1,0 +1,28 @@
+---
+- name: Check nginx installed
+  become: yes
+  yum:
+    name: nginx
+    state: present
+  register: check_nginx_installed
+  ignore_errors: yes
+
+- name: Install nginx
+  become: yes 
+  shell: amazon-linux-extras install -y nginx1
+  when: check_nginx_installed is failed
+
+- name: Change nginx/conf.d ownership
+  become: yes
+  file:
+    path: /etc/nginx/conf.d
+    owner: "{{ user_name }}"
+    group: "{{ user_name }}"
+    mode: '0755'
+
+- name: Setting Nginx
+  template:
+    src: roles/nginx/templates/your_app_name.conf.j2
+    dest: /etc/nginx/conf.d/your_app_name.conf
+    owner: "{{ user_name }}"
+    group: "{{ user_name }}"

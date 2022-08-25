@@ -1,0 +1,59 @@
+---
+- name: Install ruby package
+  become: yes
+  yum:
+    name: "{{ item }}" 
+    state: latest
+  with_items:
+    - git
+    - openssl-devel
+    - sqlite-devel
+    - gcc
+    - gcc-c++
+    - readline-devel
+    - mysql
+    - mysql-devel
+    - libselinux-python
+
+- name: Install rbenv
+  git:
+    repo: https://github.com/sstephenson/rbenv.git
+    dest: ~/.rbenv
+
+- name: Add rbenv to PATH
+  lineinfile: 
+    path="~/.bash_profile"
+    line="export PATH=$HOME/.rbenv/bin:$PATH"
+
+- name: Eval rbenv init in ~/.bash_profile
+  lineinfile: 
+    path="~/.bash_profile"
+    line='eval "$(rbenv init -)"'
+
+- name: Load rbenv setting
+  shell: bash -lc "source ~/.bash_profile"
+
+- name: Install ruby-build
+  git:
+    repo: https://github.com/sstephenson/ruby-build.git
+    dest: ~/.rbenv/plugins/ruby-build
+
+- name: Check ruby installed
+  shell: bash -lc "rbenv versions | grep {{ ruby_version }}"
+  register: rbenv_check_install
+  changed_when: False
+  ignore_errors: yes
+
+- name: Install Ruby
+  shell: bash -lc "CONFIGURE_OPTS="--disable-install-rdoc" rbenv install -s {{ ruby_version }}"
+  when: rbenv_check_install.rc == 1
+
+- name: Set default Ruby version
+  shell: bash -lc "rbenv global {{ ruby_version }} && rbenv rehash"
+
+- name: Install bundler and so on
+  shell: bash -lc "gem install {{ item }}"
+  with_items:
+    - rbenv-rehash
+    - bundler
+    - rails -v "6.0.4"

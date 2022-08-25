@@ -1,0 +1,199 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: template for VPC
+
+Parameters:
+  AZs:
+    Description: VPCSubnetes AZ
+    Type: CommaDelimitedList
+    Default: ap-northeast-1a, ap-northeast-1c
+
+Resources:
+#---------------------------------------------------------
+#VPCの設定
+#---------------------------------------------------------
+  CFnVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: your_network_address      
+      InstanceTenancy: default     
+      EnableDnsSupport: true       
+      EnableDnsHostnames: true     
+      Tags:
+        - Key: Name
+          Value: cfn-vpc
+
+#---------------------------------------------------------
+#IGWの設定
+#---------------------------------------------------------
+  CFnVPCIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: handson-cfn
+
+  CFnVPCIGWAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref CFnVPCIGW
+      VpcId: !Ref CFnVPC
+      
+#---------------------------------------------------------
+#サブネットの設定
+#---------------------------------------------------------
+  PublicSubnet00:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: your_network_address
+      VpcId: !Ref CFnVPC
+      AvailabilityZone: !Select [ 0, !Ref AZs ] 
+      MapPublicIpOnLaunch: true                 
+      Tags:
+        - Key: Name
+          Value: PublicSubnet00-cfn
+
+  PublicSubnet01:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: your_network_address
+      VpcId: !Ref CFnVPC
+      AvailabilityZone: !Select [ 1, !Ref AZs ] 
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: PublicSubnet01-cfn
+
+  PrivateSubnet00:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: your_network_address
+      VpcId: !Ref CFnVPC
+      AvailabilityZone: !Select [ 0, !Ref AZs ]
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet00-cfn
+          
+  PrivateSubnet01:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: your_network_address
+      VpcId: !Ref CFnVPC
+      AvailabilityZone: !Select [ 1, !Ref AZs ]
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet01-cfn
+
+#---------------------------------------------------------
+#Publicルートテーブルの設定
+#---------------------------------------------------------
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref CFnVPC
+      Tags:
+        - Key: Name
+          Value: Public Route
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: CFnVPCIGW 
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref CFnVPCIGW
+
+  PublicSubnet00Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet00
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet01Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet01
+      RouteTableId: !Ref PublicRouteTable
+
+#---------------------------------------------------------
+#Privateルートテーブルの設定(VPCエンドポイント用)
+#---------------------------------------------------------
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref CFnVPC
+      Tags:
+        - Key: Name
+          Value: Private Route
+
+  PrivateSubnet00Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet00
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet01Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet01
+      RouteTableId: !Ref PrivateRouteTable
+
+#---------------------------------------------------------
+#VPCゲートウェイエンドポイントの作成
+#---------------------------------------------------------
+  VPCEndpointToS3:
+    Type: AWS::EC2::VPCEndpoint
+    Properties: 
+      PolicyDocument: 
+        Version: 2012-10-17
+        Statement: 
+          - Effect: Allow
+            Principal: '*'
+            Action: 's3:*'
+            Resource: 'arn:aws:s3:::*'
+      RouteTableIds: 
+        - !Ref PublicRouteTable
+        - !Ref PrivateRouteTable
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: Gateway
+      VpcId: !Ref CFnVPC
+
+#---------------------------------------------------------
+#クロススタック作成用の設定
+#---------------------------------------------------------
+Outputs:
+  VPCID:
+    Description: VPC ID
+    Value: !Ref CFnVPC
+    Export:
+      Name: !Sub ${AWS::StackName}-VPCID 
+
+  PublicSubnet00:
+    Description: PublicSubnet00
+    Value: !Ref PublicSubnet00
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSubnet00
+
+  PublicSubnet01:
+    Description: PublicSubnet01
+    Value: !Ref PublicSubnet01
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSubnet01
+
+  PrivateSubnet00:
+    Description: PrivateSubnet00
+    Value: !Ref PrivateSubnet00
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnet00
+
+  PrivateSubnet01:
+    Description: PrivateSubnet01
+    Value: !Ref PrivateSubnet01
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnet01
+
+  PublicRouteTableID:
+    Description: PublicRouteTableID
+    Value: !Ref PublicRouteTable
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicRouteTableID

@@ -1,0 +1,11 @@
+---
+- name: create web server
+  hosts: ansible_client
+  remote_user: "{{user_name}}"
+  roles:
+    - mysql
+    - ruby
+    - webpacker
+    - git_clone
+    - nginx
+    - rails_app_start

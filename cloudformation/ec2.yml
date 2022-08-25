@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: template for EC2
+
+Parameters:
+#---------------------------------------------------------
+#サブネットID インポート用のパラメーター
+#---------------------------------------------------------
+  VPCStackName:
+    Type: String
+    Default: cfn-vpc
+
+#---------------------------------------------------------
+#既存EIP割り当て用のパラメーター
+#---------------------------------------------------------
+  EIPAllocationId:
+    Type: String
+    Default: your_EIPAllocationId
+
+#---------------------------------------------------------
+#EC2にアタッチするIAMロール用のパラメーター
+#---------------------------------------------------------
+  S3BucketName: 
+    Description: Type of this BacketName
+    Type: String
+    Default: youre_Backet_Name
+
+  KeyName:
+    Description: EC2 Key Pair to allow SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: ssh_key_name	
+
+Resources:
+#----------------------------------------
+#EC2の設定
+#----------------------------------------
+  EC2RailsServer00:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: hogehoge
+      InstanceType: t2.micro
+      SubnetId:
+        Fn::ImportValue: !Sub ${VPCStackName}-PublicSubnet00
+      UserData: !Base64 |  
+        #! /bin/bash
+        sudo yum -y update
+      SecurityGroupIds:
+        - !Ref EC2SG
+      IamInstanceProfile:
+        !Ref S3AccessInstanceProfile
+      KeyName: !Ref KeyName
+      Tags:
+        - Key: "Name"
+          Value: "cfn-ec2"
+#----------------------------------------
+#EC2 ElasticIP 割り当て
+#----------------------------------------
+  IPAssoc:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref EC2RailsServer00
+      AllocationId: !Ref EIPAllocationId
+
+#----------------------------------------
+#ELBセキュリティグループの設定
+#----------------------------------------
+  ELBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: sg for elb
+      VpcId:
+        Fn::ImportValue: !Sub ${VPCStackName}-VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+#----------------------------------------
+#EC2セキュリティグループの設定
+#----------------------------------------
+  EC2SG:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: ELBSG
+    Properties:
+      GroupDescription: sg for ec2
+      VpcId:
+        Fn::ImportValue: !Sub ${VPCStackName}-VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 22
+          ToPort: 22
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref ELBSG
+          FromPort: 80
+          ToPort: 80
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 3000
+          ToPort: 3000
+
+#---------------------------------------------------------
+#IAMロールの設定
+#---------------------------------------------------------
+  S3AccessRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - 'ec2.amazonaws.com'
+            Action: 
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: s3access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:ListAllMyBuckets"
+                  - "s3:GetBucketLocation"
+                Resource: "arn:aws:s3:::*"
+              - Effect: Allow
+                Action: "*"
+                Resource:
+                  - !Sub 'arn:aws:s3:::${S3BucketName}'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/'
+
+  S3AccessInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+      - !Ref S3AccessRole
+
+#---------------------------------------------------------
+#クロススタック作成用の設定
+#---------------------------------------------------------
+Outputs:
+  EC2RailsServer00:
+    Value: !Ref EC2RailsServer00
+    Export:
+      Name: !Sub ${AWS::StackName}-EC2RailsServer00
+  
+  EC2SGID:
+    Value: !Ref EC2SG
+    Export:
+      Name: !Sub ${AWS::StackName}-EC2SGID
+  
+  ELBSGID:
+    Value: !Ref ELBSG
+    Export:
+      Name: cfn-elb-ELBSGID
+
+

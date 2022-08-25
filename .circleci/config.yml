@@ -1,0 +1,160 @@
+---
+version: 2.1
+
+orbs: 
+  aws-cli: circleci/aws-cli@3.1.1
+  ansible-playbook: orbss/ansible-playbook@0.0.5
+
+executors:
+  python:
+    docker:
+      - image: circleci/python
+
+jobs: 
+  execute_cfn:
+    executor: aws-cli/default
+    steps:
+      - checkout
+      - aws-cli/setup
+      - run: 
+          name: create_or_update_stack_vpc
+          command: |
+            set +e
+            aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE | grep StackName | grep cfn-vpc
+            if [ $? -eq 0 ]; then
+              aws cloudformation update-stack --stack-name cfn-vpc --template-body file://cloudformation/vpc.yml
+              if [ $? -eq 255 -o $? -eq 254 ]; then
+                exit 0
+              fi
+              aws cloudformation wait stack-update-complete --stack-name cfn-vpc
+            elif [ $? -eq 1 ]; then
+              aws cloudformation create-stack --stack-name cfn-vpc --template-body file://cloudformation/vpc.yml
+              aws cloudformation wait stack-create-complete --stack-name cfn-vpc
+            fi
+      - run: 
+          name: create_or_update_stack_ec2
+          command: |
+            set +e
+            aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE | grep StackName | grep cfn-ec2
+            if [ $? -eq 0 ]; then
+              aws cloudformation update-stack --stack-name cfn-ec2 --capabilities CAPABILITY_IAM --template-body file://cloudformation/ec2.yml
+              if [ $? -eq 255 -o $? -eq 254 ]; then
+                exit 0
+              fi
+              aws cloudformation wait stack-update-complete --stack-name cfn-ec2
+            elif [ $? -eq 1 ]; then
+              aws cloudformation create-stack --stack-name cfn-ec2 --capabilities CAPABILITY_IAM --template-body file://cloudformation/ec2.yml
+              aws cloudformation wait stack-create-complete --stack-name cfn-ec2
+            fi
+      - run: 
+          name: create_or_update_stack_elb
+          command: |
+            set +e
+            aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE | grep StackName | grep cfn-elb
+            if [ $? -eq 0 ]; then
+              aws cloudformation update-stack --stack-name cfn-elb --template-body file://cloudformation/elb.yml
+              if [ $? -eq 255 -o $? -eq 254 ]; then
+                exit 0
+              fi
+              aws cloudformation wait stack-update-complete --stack-name cfn-elb
+            elif [ $? -eq 1 ]; then
+              aws cloudformation create-stack --stack-name cfn-elb --template-body file://cloudformation/elb.yml
+              aws cloudformation wait stack-create-complete --stack-name cfn-elb
+            fi
+      - run: 
+          name: create_or_update_stack_rds
+          command: |
+            set +e
+            aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE | grep StackName | grep cfn-rds
+            if [ $? -eq 0 ]; then
+              aws cloudformation update-stack --stack-name cfn-rds --template-body file://cloudformation/rds.yml
+              if [ $? -eq 255 -o $? -eq 254 ]; then
+                exit 0
+              fi
+              aws cloudformation wait stack-update-complete --stack-name cfn-rds
+            elif [ $? -eq 1 ]; then
+              aws cloudformation create-stack --stack-name cfn-rds --template-body file://cloudformation/rds.yml
+              aws cloudformation wait stack-create-complete --stack-name cfn-rds
+            fi
+      - run: 
+          name: create_or_update_stack_s3
+          command: |
+            set +e
+            aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE | grep StackName | grep cfn-s3
+            if [ $? -eq 0 ]; then
+              aws cloudformation update-stack --stack-name cfn-s3 --template-body file://cloudformation/s3.yml
+              if [ $? -eq 255 -o $? -eq 254 ]; then
+                exit 0
+              fi
+              aws cloudformation wait stack-update-complete --stack-name cfn-s3
+            elif [ $? -eq 1 ]; then
+              aws cloudformation create-stack --stack-name cfn-s3 --template-body file://cloudformation/s3.yml
+              aws cloudformation wait stack-create-complete --stack-name cfn-s3
+            fi
+
+  execute_ansible_playbook: 
+    executor: python
+    parameters:
+      version:
+        description: |
+          Ansible version
+        type: string
+        default: ''
+      inventory:
+        description: |
+          Ansible inventory file. The default value must be empty,
+          so do not store any value to this environment variable.
+          The data must be registered in base64 format
+        type: env_var_name
+        default: NONEXISTENT_ANSIBLE_INVENTORY
+      playbook:
+        description: |
+          The path of Ansible playbook
+        type: string
+      private-key:
+        description: |
+          SSH private key file. The default value must be empty,
+          so do not store any value to this environment variable.
+          The data must be registered in base64 format
+        type: env_var_name
+        default: NONEXISTENT_ANSIBLE_SSH_KEY
+    steps:
+      - checkout
+      - ansible-playbook/install:
+          version: <<parameters.version>>
+      - ansible-playbook/playbook:
+          inventory: <<parameters.inventory>>
+          playbook: <<parameters.playbook>>
+          private-key: <<parameters.private-key>>
+
+  execute_serverspec:
+    docker:
+      - image: circleci/ruby:2.6.3-node
+    steps:
+      - checkout
+      - run :
+          name: test rails_app
+          command: |
+            gem install bundler
+            gem install serverspec
+            gem install rake
+            gem install ed25519 -v '1.2'
+            gem install bcrypt_pbkdf -v '1.0'
+            rake
+
+workflows:
+  Create_Rails_env:
+    jobs:
+      - execute_cfn
+      - execute_ansible_playbook:
+          requires:
+            - execute_cfn
+          inventory: ANSIBLE_INVENTORY
+          playbook: ansible/playbook.yml
+          private-key: ANSIBLE_SSH_KEY
+      - execute_serverspec:
+          requires:
+            - execute_cfn
+            - execute_ansible_playbook
+
+

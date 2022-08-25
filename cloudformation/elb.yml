@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: template for ALB
+
+Parameters:
+#---------------------------------------------------------
+#VPCID インポート用のパラメーター
+#---------------------------------------------------------
+  VPCStackName:
+    Type: String
+    Default: cfn-vpc
+
+#---------------------------------------------------------
+#EC2インスタンスID インポート用のパラメーター
+#---------------------------------------------------------  
+  EC2Stack:
+    Type: String
+    Default: cfn-ec2
+
+#---------------------------------------------------------
+#ELBセキュリティグループのID インポート用のパラメーター
+#---------------------------------------------------------  
+  ELBSGID:
+    Type: String
+    Default: cfn-elb-ELBSGID
+
+Resources:
+  FrontLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Ref AWS::StackName
+      Subnets:
+        - Fn::ImportValue: !Sub ${VPCStackName}-PublicSubnet00
+        - Fn::ImportValue: !Sub ${VPCStackName}-PublicSubnet01
+      SecurityGroups: 
+        - Fn::ImportValue: !Ref ELBSGID
+
+  FrontLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref FrontLB
+      Port: 80
+      Protocol: HTTP 
+      DefaultActions: 
+        - Type: forward
+          TargetGroupArn: !Ref FrontLBTargetGroup
+
+  FrontLBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${AWS::StackName}-tg
+      VpcId:
+        Fn::ImportValue: !Sub ${VPCStackName}-VPCID
+      Port: 80
+      Protocol: HTTP
+      HealthCheckPath: /.check_alive
+      Targets:
+        - Id:
+            Fn::ImportValue: !Sub ${EC2Stack}-EC2RailsServer00
+
+

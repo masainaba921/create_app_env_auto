@@ -1,0 +1,81 @@
+---
+- name: Change directory and bundle install
+  command:
+    cmd: bash -lc "bundle install"
+    chdir: /var/www/your_app_name/
+
+- name: Check if masterkey exists
+  stat:
+    path: /var/www/your_app_name/config/master.key
+  register: masterkey_stat
+
+- name: Set master.key
+  block: 
+  - name: Touch master.key
+    file:
+      path: /var/www/your_app_name/config/master.key
+      state: touch
+  - name: Edit master.key
+    lineinfile:
+      path: /var/www/your_app_name/config/master.key
+      insertafter: EOF
+      line: "{{ KEY_VALUE }}"
+  when: not masterkey_stat.stat.exists
+
+- name: Get the content of .env
+  shell: "cat /var/www/your_app_name/.env | grep DATABASE"
+  register: database_stat
+  failed_when: database_stat.rc > 1
+
+- name: Set RDS enviroument
+  lineinfile:
+    path: /var/www/your_app_name/.env
+    insertafter: EOF
+    line: "{{ item }}"
+  with_items:
+      - "{{ DATABASE_APPNAME }}"
+      - "{{ DATABASE_USERNAME }}"
+      - "{{ DATABASE_PASSWORD }}"
+      - "{{ DATABASE_HOSTNAME }}"
+      - "{{ DATABASE_APPNAME }}"
+  when: database_stat.rc == 1
+
+- name: Load env
+  shell: bash -lc "source /var/www/your_app_name/.env"
+
+- name: Check if Webpacker.yml exists
+  stat:
+    path: /var/www/your_app_name/config/webpacker.yml
+  register: webpacker_yml_stat
+
+- name: Install Webpacker
+  command:
+    cmd: bash -lc "rails webpacker:install"
+    chdir: /var/www/your_app_name/
+  when: not webpacker_yml_stat.stat.exists
+
+- name: Webpacker compile
+  replace:
+    path: /var/www/your_app_name/config/webpacker.yml
+    regexp: 'compile: false'
+    replace: 'compile: true'
+
+- name: Start nginxd
+  become: yes
+  shell: bash -lc "service nginx start"
+
+- name: Set database
+  block:
+  - name: Create database
+    command:
+      cmd: bash -lc "rails db:create RAILS_ENV=production"
+      chdir: /var/www/your_app_name/
+  - name: Migrate database
+    command:
+      cmd: bash -lc "rails db:migrate RAILS_ENV=production"
+      chdir: /var/www/your_app_name/
+
+- name: Start unicorn
+  command:
+    cmd: bash -lc "bundle exec unicorn_rails -c /var/www/your_app_name/config/unicorn.rb -D -E production"
+    chdir: /var/www/your_app_name/

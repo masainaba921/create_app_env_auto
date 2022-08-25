@@ -1,0 +1,36 @@
+---
+- name: remove the MariaDB
+  become: yes
+  yum:
+    name: mariadb-server
+    state: absent
+
+- name: install the mysql rpm from a remote repo
+  become: yes
+  yum:
+    name: 'https://dev.mysql.com/get/mysql80-community-release-el7-3.noarch.rpm'
+    state: present
+
+- name: enable mysql57-community
+  become: yes
+  shell: |
+    yum-config-manager --disable mysql80-community
+    yum-config-manager --enable mysql57-community
+
+- name: Import a key from a url
+  become: yes
+  ansible.builtin.rpm_key:
+    state: present
+    key: https://repo.mysql.com/RPM-GPG-KEY-mysql-2022
+
+- name: install mysql-community-server
+  become: yes
+  yum: 
+    name: mysql-community-server
+    state: latest
+
+- name: install mysql-devel
+  become: yes
+  yum: 
+    name: mysql-devel
+    state: latest

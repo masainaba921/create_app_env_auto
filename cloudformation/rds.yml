@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: template for RDS
+
+Parameters:
+#---------------------------------------------------------
+#VPCID インポート用のパラメーター
+#---------------------------------------------------------
+  VPCStackName:
+    Type: String
+    Default: cfn-vpc
+
+  DBInstanceID:
+    Type: String
+    Default: cfn-rds
+    Description: Database instance name
+
+  DBUser:
+    Type: String
+    Default: your_user_name
+
+  DBPassword:
+    Type: String
+    Default: your_password
+    NoEcho: true
+
+#---------------------------------------------------------
+#EC2セキュリティグループのID インポート用のパラメーター
+#---------------------------------------------------------  
+  EC2SGID:
+    Type: String
+    Default: cfn-ec2-EC2SGID
+
+Resources:
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete     
+    Properties:
+      DBInstanceIdentifier: !Ref DBInstanceID
+      DBInstanceClass: db.t2.micro
+      AllocatedStorage: "20"
+      StorageType: gp2
+      Engine: MySQL
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Ref DBPassword
+      DBName: hogehoge
+      BackupRetentionPeriod: 0 
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+
+  DBSubnetGroup: 
+    Type: AWS::RDS::DBSubnetGroup
+    Properties: 
+      DBSubnetGroupDescription: DB Subnet Group for Private Subnet
+      SubnetIds: 
+        - Fn::ImportValue: !Sub ${VPCStackName}-PrivateSubnet00
+        - Fn::ImportValue: !Sub ${VPCStackName}-PrivateSubnet01
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: !Sub ${AWS::StackName}-MySQL
+      VpcId:
+        Fn::ImportValue: !Sub ${VPCStackName}-VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: 
+            Fn::ImportValue: !Ref EC2SGID
